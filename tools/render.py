@@ -35,7 +35,7 @@ def synth():
 
 def query(text):
     q = synth().create_audio_query(text, SPEAKER)
-    q.speed_scale = 1.08; q.pre_phoneme_length = 0.15; q.post_phoneme_length = 0.35
+    q.speed_scale = 1.15; q.pre_phoneme_length = 0.05; q.post_phoneme_length = 0.3
     return q
 
 def tts(text):
@@ -69,12 +69,14 @@ def draw(sc, i, n):
     x0, y0, cw, ch = 70, 300, W - 140, 1240
     d.rounded_rectangle([x0, y0, x0 + cw, y0 + ch], 40, fill="white")
     d.rectangle([x0, y0 + 60, x0 + 12, y0 + ch - 60], fill=(232, 130, 60))
-    tag = sc.get("tag") or LABEL
-    f = font(FB, 40); tw = d.textlength(tag, font=f)
-    d.rounded_rectangle([x0 + 60, y0 + 70, x0 + 108 + tw, y0 + 146], 38, fill=(47, 93, 140))
-    d.text((x0 + 84, y0 + 108), tag, font=f, fill="white", anchor="lm")
+    hook = sc.get("hook", False)
+    if not hook:
+        tag = sc.get("tag") or LABEL
+        f = font(FB, 40); tw = d.textlength(tag, font=f)
+        d.rounded_rectangle([x0 + 60, y0 + 70, x0 + 108 + tw, y0 + 146], 38, fill=(47, 93, 140))
+        d.text((x0 + 84, y0 + 108), tag, font=f, fill="white", anchor="lm")
     maxw = cw - 190  # 右端はショートのボタンにかかるので空ける
-    size = 100  # 見出しは \n の位置だけで改行されるまで縮める
+    size = 128 if hook else 100  # 見出しは \n の位置だけで改行されるまで縮める
     while True:
         fh = font(FB, size); hl = wrap(d, sc["head"], fh, maxw)
         if len(hl) == len(sc["head"].split("\n")) or size <= 60: break
@@ -85,11 +87,12 @@ def draw(sc, i, n):
         if all(len(x) == 1 for x in bl) or bs <= 42: break
         bs -= 2
     hh = len(hl) * int(size * 1.35) + (50 + sum(len(x) * int(bs * 1.45) + 22 for x in bl) if bl else 0)
-    top, bottom = y0 + 180, y0 + ch - 60
+    top, bottom = (y0 + 80 if hook else y0 + 180), y0 + ch - 60
     if hh > bottom - top: raise SystemExit(f"scene {i+1}: 文字があふれています")
     y = top + (bottom - top - hh) // 2
-    for l in hl:
-        d.text((x0 + 60, y), l, font=fh, fill=(31, 42, 55)); y += int(size * 1.35)
+    for k, l in enumerate(hl):
+        col = (232, 130, 60) if hook and k == len(hl) - 1 else (31, 42, 55)  # 冒頭は最後の行をオレンジで強調
+        d.text((x0 + 60, y), l, font=fh, fill=col); y += int(size * 1.35)
     y += 50
     for lines in bl:
         for k, l in enumerate(lines):
@@ -143,7 +146,7 @@ def main(src, out):
         png = f"{tmp}/s{i}.png"; draw(sc, i, len(scenes)).save(png)
         part, t = f"{tmp}/s{i}.mp4", f"{tmp}/s{i}.tmp.mp4"
         subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(FPS), "-i", png, "-vf",
-                        f"format=yuv420p,loop=-1:1,trim=duration={dur:.3f},fade=in:st=0:d=0.25", *ENC, t], check=True)
+                        f"format=yuv420p,loop=-1:1,trim=duration={dur:.3f}" + ("" if i == 0 else ",fade=in:st=0:d=0.2"), *ENC, t], check=True)
         os.replace(t, part); files.append(part)
     a = np.concatenate(audio); a = (a / max(1, np.abs(a).max()) * 0.9 * 32767).astype(np.int16)
     with wave.open(f"{tmp}/a.wav", "wb") as w:
