@@ -65,10 +65,6 @@ def draw(sc, i, n):
         d.line([(0, y), (W, y)], fill=(int(255 - 2*t), int(247 - 12*t), int(232 - 21*t)))
     d.ellipse([780, -160, 1300, 360], fill=(250, 222, 190))
     d.ellipse([-200, 1600, 260, 2060], fill=(226, 230, 232))
-    # 上部の常設帯：元記事への誘導
-    ft = font(FB, 44); msg = "全文はnote「応援隊」で公開中"; mw = d.textlength(msg, font=ft)
-    d.rounded_rectangle([(W - mw) / 2 - 40, 170, (W + mw) / 2 + 40, 254], 42, fill=(232, 130, 60))
-    d.text((W / 2, 212), msg, font=ft, fill="white", anchor="mm")
     x0, y0, cw, ch = 70, 300, W - 140, 1240
     d.rounded_rectangle([x0, y0, x0 + cw, y0 + ch], 40, fill="white")
     d.rectangle([x0, y0 + 60, x0 + 12, y0 + ch - 60], fill=(232, 130, 60))
