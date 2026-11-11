@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
-"""台本JSON → 縦型ショート動画（1080x1920, 30fps, Open JTalk ナレーション）
+"""台本JSON → 縦型ショート動画（1080x1920, 30fps, VOICEVOX:青山龍星 ナレーション）
+準備: sh tools/setup_voice.sh
 使い方: python3 render.py script.json out.mp4
+読み確認: python3 render.py --kana script.json
 script.json: {"scenes":[{"tag":"","head":"","body":["",""],"say":""}, ...]}
   tag  … 上の小ラベル（例「1つめ」）。空なら「中学受験｜保護者のための実践ガイド」
   head … 大見出し（\\n で改行可）
@@ -8,6 +10,7 @@ script.json: {"scenes":[{"tag":"","head":"","body":["",""],"say":""}, ...]}
   say  … 読み上げ文（読み間違えやすい語はひらがなで）
 """
 import json, os, subprocess, sys, wave
+import io
 import numpy as np, pyopenjtalk
 from PIL import Image, ImageDraw, ImageFont
 
@@ -16,6 +19,31 @@ FB = "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc"
 FM = "/usr/share/fonts/opentype/noto/NotoSansCJK-Medium.ttc"
 LABEL = "中学受験｜保護者のための実践ガイド"
 ENC = ["-c:v", "libx264", "-crf", "26", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-r", str(FPS)]
+
+VV = "/home/claude/voicevox"
+SPEAKER = 13  # 青山龍星 ノーマル（説明欄に「VOICEVOX:青山龍星」のクレジットが必要）
+_syn = None
+def synth():
+    global _syn
+    if _syn is None:
+        from voicevox_core.blocking import Onnxruntime, OpenJtalk, Synthesizer, VoiceModelFile
+        ort = Onnxruntime.load_once(filename=f"{VV}/ort/lib/libvoicevox_onnxruntime.so.1.23.2")
+        _syn = Synthesizer(ort, OpenJtalk(pyopenjtalk.OPEN_JTALK_DICT_DIR.decode()))
+        with VoiceModelFile.open(f"{VV}/vvm/vvms/15.vvm") as m: _syn.load_voice_model(m)
+    return _syn
+
+def query(text):
+    q = synth().create_audio_query(text, SPEAKER)
+    q.speed_scale = 1.08; q.pre_phoneme_length = 0.15; q.post_phoneme_length = 0.35
+    return q
+
+def tts(text):
+    with wave.open(io.BytesIO(synth().synthesis(query(text), SPEAKER))) as w:
+        sr = w.getframerate(); x = np.frombuffer(w.readframes(w.getnframes()), np.int16).astype(np.float64)
+    return x, sr
+
+def kana(text):
+    return "/".join("".join(m.text for m in ap.moras) for ap in query(text).accent_phrases)
 
 def font(p, s): return ImageFont.truetype(p, s, index=0)
 
@@ -82,8 +110,7 @@ def main(src, out):
     tmp = os.path.splitext(out)[0] + "_parts"; os.makedirs(tmp, exist_ok=True)
     audio, files = [], []
     for i, sc in enumerate(scenes):
-        x, sr = pyopenjtalk.tts(sc["say"], speed=1.12)
-        x = np.concatenate([np.zeros(int(sr * 0.25)), x, np.zeros(int(sr * 0.45))])
+        x, sr = tts(sc["say"])
         audio.append(x); dur = len(x) / sr
         png = f"{tmp}/s{i}.png"; draw(sc, i, len(scenes)).save(png)
         part, t = f"{tmp}/s{i}.mp4", f"{tmp}/s{i}.tmp.mp4"
@@ -102,4 +129,8 @@ def main(src, out):
     print(f"{out}: {len(a)/sr:.1f}秒, {os.path.getsize(out)/1e6:.2f}MB")
 
 if __name__ == "__main__":
-    main(sys.argv[1], sys.argv[2])
+    if sys.argv[1] == "--kana":
+        for i, sc in enumerate(json.load(open(sys.argv[2], encoding="utf-8"))["scenes"]):
+            print(i + 1, kana(sc["say"]))
+    else:
+        main(sys.argv[1], sys.argv[2])
