@@ -3,6 +3,7 @@
 準備: sh tools/setup_voice.sh
 使い方: python3 render.py script.json out.mp4
 読み確認: python3 render.py --kana script.json
+サムネイル: python3 render.py --thumb script.json out.jpg（script.json の "thumb"）
 script.json: {"scenes":[{"tag":"","head":"","body":["",""],"say":""}, ...]}
   tag  … 上の小ラベル（例「1つめ」）。空なら「中学受験｜保護者のための実践ガイド」
   head … 大見出し（\\n で改行可）
@@ -101,6 +102,37 @@ def draw(sc, i, n):
         d.ellipse([cx - 10, 1640, cx + 10, 1660], fill=(232, 130, 60) if k == i else (210, 200, 190))
     return im
 
+def thumbnail(th, out):
+    """縦型サムネイル 1080x1920。th = {"top": 小見出し, "main": 大見出し(\\n可), "sub": オレンジの補足}"""
+    im = Image.new("RGB", (W, H)); d = ImageDraw.Draw(im)
+    for y in range(H):
+        t = y / H
+        d.line([(0, y), (W, y)], fill=(int(255 - 2*t), int(247 - 12*t), int(232 - 21*t)))
+    d.ellipse([700, -250, 1350, 400], fill=(250, 214, 175))
+    d.ellipse([-260, 1500, 330, 2090], fill=(222, 228, 234))
+    x0, y0, cw, ch = 60, 330, W - 120, 1180
+    d.rounded_rectangle([x0, y0, x0 + cw, y0 + ch], 44, fill="white")
+    d.rectangle([x0, y0 + 70, x0 + 16, y0 + ch - 70], fill=(232, 130, 60))
+    f = font(FB, 46); tag = th.get("top") or "中学受験｜保護者のための実践ガイド"; tw = d.textlength(tag, font=f)
+    d.rounded_rectangle([x0 + 70, y0 + 80, x0 + 130 + tw, y0 + 168], 44, fill=(47, 93, 140))
+    d.text((x0 + 100, y0 + 124), tag, font=f, fill="white", anchor="lm")
+    maxw = cw - 150
+    size = 150
+    while True:
+        fh = font(FB, size); hl = wrap(d, th["main"], fh, maxw)
+        if len(hl) == len(th["main"].split("\n")) or size <= 80: break
+        size -= 6
+    fs = font(FB, 64); sl = wrap(d, th.get("sub", ""), fs, maxw) if th.get("sub") else []
+    hh = len(hl) * int(size * 1.25) + (40 + len(sl) * 88 if sl else 0)
+    y = y0 + 220 + (ch - 300 - hh) // 2
+    for l in hl:
+        d.text((x0 + 70, y), l, font=fh, fill=(31, 42, 55)); y += int(size * 1.25)
+    y += 40
+    for l in sl:
+        d.text((x0 + 70, y), l, font=fs, fill=(232, 130, 60)); y += 88
+    if y > y0 + ch - 30: raise SystemExit("サムネイル: 文字があふれています")
+    im.save(out, quality=92)
+
 def main(src, out):
     scenes = json.load(open(src, encoding="utf-8"))["scenes"]
     tmp = os.path.splitext(out)[0] + "_parts"; os.makedirs(tmp, exist_ok=True)
@@ -125,7 +157,9 @@ def main(src, out):
     print(f"{out}: {len(a)/sr:.1f}秒, {os.path.getsize(out)/1e6:.2f}MB")
 
 if __name__ == "__main__":
-    if sys.argv[1] == "--kana":
+    if sys.argv[1] == "--thumb":  # python3 render.py --thumb script.json out.jpg
+        thumbnail(json.load(open(sys.argv[2], encoding="utf-8"))["thumb"], sys.argv[3])
+    elif sys.argv[1] == "--kana":
         for i, sc in enumerate(json.load(open(sys.argv[2], encoding="utf-8"))["scenes"]):
             print(i + 1, kana(sc["say"]))
     else:
